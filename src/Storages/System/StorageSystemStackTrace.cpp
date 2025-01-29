@@ -232,9 +232,10 @@ bool parseHexNumber(std::string_view sv, UInt64 & res)
 {
     errno = 0; /// Functions strto* don't clear errno.
     char * pos_integer = const_cast<char *>(sv.data());
-    res = std::strtoull(sv.data(), &pos_integer, 16);
+    res = std::strtoull(sv.data(), &pos_integer, 16); /// NOLINT(bugprone-suspicious-stringview-data-usage)
     return (pos_integer == sv.data() + sv.size() && errno != ERANGE);
 }
+
 bool isSignalBlocked(UInt64 tid, int signal)
 {
     String buffer;
