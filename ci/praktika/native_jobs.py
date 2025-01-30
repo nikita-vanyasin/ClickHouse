@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -308,7 +309,9 @@ def _config_workflow(workflow: Workflow.Config, job_name) -> Result:
             )
         )
 
-    if results[-1].is_ok() and workflow.enable_cache:
+    if os.environ.get("DISABLE_CI_CACHE", "0") != "1":
+        print("NOTE: CI Cache disabled via GH Variable DISABLE_CI_CACHE=1")
+    elif results[-1].is_ok() and workflow.enable_cache:
         print("Cache Lookup")
         stop_watch = Utils.Stopwatch()
         info = ""

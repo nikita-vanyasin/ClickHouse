@@ -161,13 +161,14 @@ def main():
 
     if Shell.get_output("git rev-parse --is-shallow-repository") == "true":
         print("Unshallow repo")
-        branch = Shell.get_output("git branch  -r --contains HEAD").split("/")[-1]
+        branch = Shell.get_output("git branch  -r --contains HEAD").removeprefix("origin/")
         Shell.check(
-            f"git fetch --prune --no-recurse-submodules --depth 10000 --filter=tree:0 origin {branch} +refs/tags/*:refs/tags/*",
+            f"git fetch --prune --no-recurse-submodules --depth 10000 --filter=tree:0 origin {branch} master +refs/tags/*:refs/tags/*",
             verbose=True,
         )
 
     print("Fetch submodules")
+    # TODO: test sparse checkout: update-submodules.sh?
     Shell.check(
         "git submodule init && git submodule update --depth 1 --recursive --jobs 20",
         verbose=True,
