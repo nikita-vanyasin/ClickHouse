@@ -460,6 +460,61 @@ ReplxxLineReader::ReplxxLineReader(
     };
 
     rx.bind_key(Replxx::KEY::control('R'), interactive_history_search);
+
+    auto useful_queries_search = [this](char32_t code)
+    {
+        // Options:
+        // - read from directory --useful-queries=./internal-knowledge-base/useful-queries
+        // - read from file --useful-queries=./query-collection.sql
+        // - read from table (CREATE TABLE system.useful_queries (description String, query String))
+        // - skim only through description, not query itself (but show query in preview!)
+        // More general approach: call it "query collections"
+        // - read from directory --query-collection=./internal-knowledge-base/useful-queries
+        // - read from table (CREATE TABLE system.query_collection (collection_name, description String, query String) )
+        std::vector<std::string> words;
+        {
+
+            words.push_back("/* memory-related settings */\nSELECT name, default, value, changed FROM system.settings WHERE name LIKE '%memory%';");
+
+            words.push_back("/* memory-internsive queries */SELECT type, event_time, initial_query_id, query_id, formatReadableSize(memory_usage) AS memory, ProfileEvents.Values [indexOf(ProfileEvents.Names, 'UserTimeMicroseconds')] AS userCPU, ProfileEvents.Values [indexOf(ProfileEvents.Names, 'SystemTimeMicroseconds')] AS systemCPU, normalizedQueryHash(query) AS normalized_query_hash FROM clusterAllReplicas(default, system.query_log) ORDER BY memory_usage DESC LIMIT 50\n");
+
+            words.push_back("/* max parts count per partition */\nSELECT value FROM system.asynchronous_metrics WHERE metric = 'MaxPartCountForPartition';");
+
+            words.push_back("/* slow queries */\nSELECT hostname() AS pod, user, query_kind, event_time, query_duration_ms, exception_code, exception, normalized_query_hash, concat(substring(query, 1, 50), '...') FROM clusterAllReplicas(default, system.query_log) WHERE ((    event_time >= makeDateTime(2024, 2, 19, 23, 17, 0)) AND (    event_time <= makeDateTime(2024, 2, 20, 1, 52, 0)        )    )    AND (query_duration_ms > 10000) ORDER BY query_duration_ms DESC LIMIT 50;");
+
+            words.push_back("/* table sizes */\nSELECT table, formatReadableSize(sum(bytes)) as size, min(min_date) as min_date, max(max_date) as max_date FROM system.parts WHERE active GROUP BY table ;");
+
+            words.push_back("/* errors count on async requests */\nSELECT count() FROM system.asynchronous_insert_log WHERE status != 'Ok';");
+
+            words.push_back("/* replication queue */\n SELECT concat(database, '.', table) AS table_name, replica_name AS instance, node_name, type, count() AS count FROM clusterAllReplicas(default, system.replication_queue) GROUP BY instance, table_name, node_name, type ORDER BY instance DESC, table_name ASC, node_name ASC, type ASC, count ASC LIMIT 100;");
+        }
+
+        std::string current_query(rx.get_state().text());
+        std::string new_query;
+        try
+        {
+            new_query = std::string(skim(current_query, words));
+        }
+        catch (const std::exception & e)
+        {
+            rx.print("skim failed: %s (consider using Ctrl-T for a regular non-fuzzy reverse search)\n", e.what());
+        }
+
+        /// REPAINT before to avoid prompt overlap by the query
+        rx.invoke(Replxx::ACTION::REPAINT, code);
+
+        if (!new_query.empty())
+            rx.set_state(replxx::Replxx::State(new_query.c_str(), static_cast<int>(new_query.size())));
+
+        if (bracketed_paste_enabled)
+            enableBracketedPaste();
+
+        rx.invoke(Replxx::ACTION::CLEAR_SELF, code);
+        return rx.invoke(Replxx::ACTION::REPAINT, code);
+    };
+
+
+    rx.bind_key(Replxx::KEY::control('U'), useful_queries_search);
 #endif
 
     /// Rebind regular incremental search to C-T.
